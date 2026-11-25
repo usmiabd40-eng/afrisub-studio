@@ -1,0 +1,1 @@
+Hohe ASR service is adapted from https://github.com/snapwre/hohe-serve. The speech model is https://huggingface.co/snapwre/hohe-asr-amharic. Model license: CC BY 4.0. Model creators: Chapi and the Dataset.ET contributors. Retain attribution to the original model and upstream service. The training corpus is not included and is not covered by the model license.\n
