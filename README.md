@@ -6,41 +6,69 @@ A mobile-friendly browser workspace to transcribe Amharic speech, edit timed cap
 
 - MP4/MOV upload (250 MB browser UI limit).
 - Audio extraction in the browser; the original video is not uploaded to the transcription API.
-- Google Cloud Speech-to-Text (am-ET) as the recommended Amharic engine, using automatic punctuation and word timestamps.
-- Cloudflare Workers AI Whisper as a selectable fallback.
+- Hohe ASR (Amharic-specialist) as the primary engine, with timestamped chunk output.
+- Google Cloud Speech-to-Text and Cloudflare Workers AI Whisper as selectable alternatives.
 - Editable Amharic captions and start/end times.
 - Live subtitle preview with text size, color and background controls.
 - Export SRT and WebVTT files.
-- Record a subtitled WebM in the browser; YouTube accepts WebM uploads.
+- Record a subtitled WebM in the browser.
 
-## Cloudflare Pages setup
+## Hohe ASR service
 
-The repository is connected to Cloudflare Pages and deploys from main. The Pages project uses an AI binding named AI for the Whisper fallback.
+The `hohe-service/` directory contains a small adapted deployment of the open Hohe ASR server. It runs the CC BY 4.0 model `snapwre/hohe-asr-amharic` and retains upstream attribution in `hohe-service/ATTRIBUTION.md`.
 
-### Enable Google Chirp (recommended)
+The service:
+- downloads the model weights at startup (about 2.42 GB);
+- runs on CPU with dynamic int8 quantisation enabled by default;
+- accepts audio at `POST /transcribe` and exposes `GET /health`;
+- returns NDJSON partial updates and final timestamped chunk segments;
+- supports an optional `ASR_SECRET` checked through `x-asr-secret`.
 
-1. In Google Cloud Console, select or create a project and enable the Cloud Speech-to-Text API.
-2. Create an API key. Restrict it to the Cloud Speech-to-Text API and appropriate usage limits.
-3. In Cloudflare Dashboard, open Workers & Pages → afrisub-studio → Settings → Variables and Secrets.
-4. Add a production secret named GOOGLE_SPEECH_API_KEY with the API key value. Add it to Preview too if you want preview deployments to use Google.
-5. Redeploy the latest commit.
+The upstream project recommends four CPU cores for good throughput. A 4 GB RAM service is the practical minimum starting point; choose a larger plan if the model fails to load or runs out of memory.
 
-The key is read only by the server-side Pages Function; it is never sent to the browser. Google lists Amharic (Ethiopia), locale am-ET, for Chirp and Chirp 2. Recognition quality still depends on the audio and must be reviewed.
+### Deploy the Hohe service
 
-### API
+Deploy the `hohe-service/` directory as a Docker web service on a host that can provide sufficient RAM and CPU. On Render, configure:
+- Root / Docker context: `hohe-service`
+- Dockerfile: `Dockerfile`
+- Environment: `MODEL_ID=snapwre/hohe-asr-amharic`, `MODEL_DIR=/model`, `INT8=1`
+- Set `ASR_SECRET` to a long random secret.
+- Health check path: `/health`
 
-POST /api/transcribe accepts multipart form data: audio (mono 16 kHz PCM WAV) and provider (google or whisper).
+The model weights are downloaded on first boot. Keep a persistent disk mounted at `/model` if the host supports it and you want to avoid downloading the model after restarts.
 
-The Google provider sends 50-second audio chunks to Google Cloud Speech-to-Text and offsets returned word timestamps to the original video timeline. The Whisper provider calls the Cloudflare Workers AI Whisper Large v3 Turbo model.
+### Connect it to Cloudflare Pages
+
+In Pages → afrisub-studio → Settings → Variables and Secrets, add:
+- `HOHE_ASR_URL`: the deployed service base URL (without a trailing slash)
+- `HOHE_ASR_SECRET`: the same random secret configured on the Hohe service
+
+The Pages Function proxies transcription server-to-server; the secret is not exposed to the browser. Redeploy Pages after adding the variables.
+
+## Other transcription engines
+
+- Google: set `GOOGLE_SPEECH_API_KEY` as a Pages secret.
+- Whisper: requires the Pages AI binding named `AI`.
+
+## API
+
+`POST /api/transcribe` accepts multipart form data:
+- `audio`: mono 16 kHz PCM WAV audio
+- `provider`: `hohe`, `google`, or `whisper`
+
+Hohe returns timestamped chunks rather than word-level forced alignment. The current subtitle timing is approximate at chunk boundaries; always listen and adjust timings before publishing.
 
 ## Local development
 
-Use Wrangler Pages local development with an AI binding and a local GOOGLE_SPEECH_API_KEY secret in .dev.vars. Never commit .dev.vars, API keys, or other secrets.
+Use Wrangler Pages local development with an `AI` binding and required secrets in `.dev.vars`. Never commit `.dev.vars`, API keys, or other secrets.
 
-## Notes and limitations
+## Known limitations
 
-- Speech recognition is not guaranteed to be word-perfect. Always play the video and correct the transcript before publishing.
-- Browser audio decoding depends on the video audio codec. MP4 with AAC audio is a good compatibility choice.
-- Video export records the video and subtitle overlay in real time to WebM using the browser MediaRecorder API. Keep the tab open until export completes; long videos take as long as their playback duration.
-- Video export depends on browser support for canvas capture and MediaRecorder. SRT/VTT exports remain available if a browser cannot record video.
-- Google Chirp requires a Google Cloud API key and may incur Google Cloud charges. Whisper remains available as a fallback.
+- Speech recognition is not word-perfect. The model is Amharic-only, does not add punctuation, and performs worse with overlapping speakers. Review the transcript before publishing.
+- Browser audio decoding depends on the video's audio codec. MP4 with AAC audio is a good compatibility choice.
+- Video export records the video and subtitle overlay in real time to WebM using the browser MediaRecorder API. Keep the tab open until export completes.
+- Google and Whisper remain available as alternatives if configured.
+
+## Model attribution
+
+Hohe ASR model: `snapwre/hohe-asr-amharic`, created by Chapi and the Dataset.ET contributors. Model licence: CC BY 4.0. The training corpus is not distributed with the model and is not covered by that licence. See `hohe-service/ATTRIBUTION.md`.
