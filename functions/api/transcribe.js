@@ -51,17 +51,17 @@ async function hoheTranscribe(audio, env) {
   form.append("audio", audio, audio.name || "audio.wav");
   const headers = {};
   if (env.HOHE_ASR_SECRET) headers["x-asr-secret"] = env.HOHE_ASR_SECRET;
-  const base = env.HOHE_ASR_URL.replace(/\\/$/, "");
+    const base = env.HOHE_ASR_URL.replace(/\/$/, "");
   const upstream = await fetch(base + "/transcribe", { method: "POST", headers, body: form, signal: AbortSignal.timeout(240000) });
   if (!upstream.ok) {
     const message = await upstream.text();
     throw new Error("Hohe ASR error (" + upstream.status + "): " + message.slice(0, 220));
   }
   const body = await upstream.text();
-  const events = body.split(/\\r?\\n/).filter(Boolean).map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+    const events = body.split(/\r?\n/).filter(Boolean).map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
   const final = events.find(event => event.final !== undefined);
   const segments = final?.segments || events.at(-1)?.segments || [];
-  return segments.map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || "").replace(/^\\[AMH\\]\\s*/, "").trim() })).filter(s => s.text && s.end > s.start);
+    return segments.map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || "").replace(/^\[AMH\]\s*/, "").trim() })).filter(s => s.text && s.end > s.start);
 }
 async function googleTranscribe(bytes, env) {
   if (!env.GOOGLE_SPEECH_API_KEY) throw new Error("Google Chirp is not connected yet. Add GOOGLE_SPEECH_API_KEY as a Cloudflare Pages secret, then retry. You can choose Whisper as a temporary backup.");
