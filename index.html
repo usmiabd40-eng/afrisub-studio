@@ -27,8 +27,8 @@
 <section class="card"><div class="cardhead"><h2>Upload your video</h2><span class="step">01 / SOURCE</span></div>
 <label class="upload" id="dropzone" for="videoFile"><div><div class="upicon">↥</div><b>Drop your video here</b><p>MP4 or MOV · up to 250 MB</p><span class="btn light">Browse files</span></div><input id="videoFile" type="file" accept="video/mp4,video/quicktime,.mp4,.mov"></label>
 <div class="filebar" id="filebar" hidden><strong id="filename">No video selected</strong><span id="filesize"></span><button class="btn small light" id="remove">Remove</button></div>
-<div class="field"><label for="engine">SPEECH RECOGNITION ENGINE</label><select id="engine"><option value="google">Google Chirp · Amharic-first option</option><option value="whisper">Whisper · backup engine</option></select></div>
-<div class="engine-note" id="engineNote"><b>Recommended for Amharic</b>Google Chirp supports Amharic (am-ET). It needs a Google Cloud Speech-to-Text API key configured privately in Cloudflare.</div>
+<div class="field"><label for="engine">SPEECH RECOGNITION ENGINE</label><select id="engine"><option value="hohe" selected>Hohe ASR · Amharic specialist</option><option value="whisper">Whisper · backup engine</option><option value="google">Google Speech · alternative</option></select></div>
+<div class="engine-note" id="engineNote"><b>Recommended for Amharic</b>Hohe is trained specifically for Amharic speech. The Hohe recognition service must be deployed and connected to this app.</div>
 <div class="row" style="display:flex;gap:8px;margin-top:14px"><button class="btn primary" id="generate" disabled>✦ Generate subtitles</button><button class="btn outline" id="reset" disabled>Reset</button></div>
 <div class="status" id="status"><span id="statusText"></span><div class="progress"><span id="progressBar"></span></div></div>
 <p class="hint">Audio is extracted in your browser. Your original video is not uploaded to the transcription service.</p>
