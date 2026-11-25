@@ -31,3 +31,8 @@ Use the Cloudflare Pages local development tooling (for example, `wrangler pages
 - The browser must be able to decode the video's audio track. MP4 with AAC audio is the most broadly compatible starting point.
 - The first release exports SRT and VTT. Burned-in MP4 export is not included yet.
 - The transcription endpoint has a 24 MB extracted-audio limit.
+
+
+## Deployment
+
+Production hosting target: Cloudflare Pages (`afrisub-studio.pages.dev`).
