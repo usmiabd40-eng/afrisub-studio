@@ -54,9 +54,9 @@ The Pages Function proxies transcription server-to-server; the secret is not exp
 
 `POST /api/transcribe` accepts multipart form data:
 - `audio`: mono 16 kHz PCM WAV audio
-- `provider`: `hohe`, `google`, or `whisper`
+- `provider`: `whisper` (default), or `hohe` only if its service has been configured
 
-Hohe returns timestamped chunks rather than word-level forced alignment. The current subtitle timing is approximate at chunk boundaries; always listen and adjust timings before publishing.
+Whisper word timestamps are grouped into short subtitle lines. Always listen and adjust text and timings before publishing.
 
 ## Local development
 
