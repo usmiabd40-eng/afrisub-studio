@@ -45,6 +45,24 @@ function groupWords(words, offset) {
   }
   flush(); return out.filter(x => x.text && x.end > x.start);
 }
+async function hoheTranscribe(audio, env) {
+  if (!env.HOHE_ASR_URL) throw new Error("Hohe ASR service is not connected yet.");
+  const form = new FormData();
+  form.append("audio", audio, audio.name || "audio.wav");
+  const headers = {};
+  if (env.HOHE_ASR_SECRET) headers["x-asr-secret"] = env.HOHE_ASR_SECRET;
+  const base = env.HOHE_ASR_URL.replace(/\\/$/, "");
+  const upstream = await fetch(base + "/transcribe", { method: "POST", headers, body: form, signal: AbortSignal.timeout(240000) });
+  if (!upstream.ok) {
+    const message = await upstream.text();
+    throw new Error("Hohe ASR error (" + upstream.status + "): " + message.slice(0, 220));
+  }
+  const body = await upstream.text();
+  const events = body.split(/\\r?\\n/).filter(Boolean).map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+  const final = events.find(event => event.final !== undefined);
+  const segments = final?.segments || events.at(-1)?.segments || [];
+  return segments.map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || "").replace(/^\\[AMH\\]\\s*/, "").trim() })).filter(s => s.text && s.end > s.start);
+}
 async function googleTranscribe(bytes, env) {
   if (!env.GOOGLE_SPEECH_API_KEY) throw new Error("Google Chirp is not connected yet. Add GOOGLE_SPEECH_API_KEY as a Cloudflare Pages secret, then retry. You can choose Whisper as a temporary backup.");
   const info = wavInfo(bytes), chunks = [], maxBytes = Math.floor(info.bytesPerSecond * GOOGLE_CHUNK_SECONDS);
@@ -79,17 +97,17 @@ async function whisperTranscribe(bytes, env) {
   return segments;
 }
 export async function onRequestPost({ request, env }) {
-  if (!env.AI && !env.GOOGLE_SPEECH_API_KEY) return json({ error: "No speech recognition engine is configured." }, 503);
+  if (!env.AI && !env.GOOGLE_SPEECH_API_KEY && !env.HOHE_ASR_URL) return json({ error: "No speech recognition engine is configured." }, 503);
   const origin = request.headers.get("Origin");
   if (origin && origin !== new URL(request.url).origin) return json({ error: "Cross-origin requests are not allowed." }, 403);
   let form; try { form = await request.formData(); } catch { return json({ error: "Please upload an audio track." }, 400); }
-  const audio = form.get("audio"), provider = form.get("provider") === "whisper" ? "whisper" : "google";
+  const audio = form.get("audio"), provider = ["hohe", "whisper"].includes(form.get("provider")) ? form.get("provider") : "google";
   if (!(audio instanceof File)) return json({ error: "No audio file was received." }, 400);
   if (!["audio/wav", "audio/x-wav"].includes(audio.type)) return json({ error: "Audio must be WAV format." }, 415);
   if (audio.size < 44 || audio.size > MAX_AUDIO_BYTES) return json({ error: "Audio must be between 44 bytes and 24 MB." }, 413);
   try {
     const bytes = new Uint8Array(await audio.arrayBuffer());
-    const segments = provider === "google" ? await googleTranscribe(bytes, env) : await whisperTranscribe(bytes, env);
+    const segments = provider === "hohe" ? await hoheTranscribe(audio, env) : provider === "google" ? await googleTranscribe(bytes, env) : await whisperTranscribe(bytes, env);
     if (!segments.length) return json({ error: "No speech was recognized. Try a clearer recording and listen again." }, 422);
     return json({ text: segments.map(s => s.text).join(" "), segments, language: "am-ET", provider });
   } catch (error) {
