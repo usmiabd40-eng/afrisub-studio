@@ -47,7 +47,34 @@ $('videoFile').addEventListener('change',e=>setFile(e.target.files[0]));
 const dz=$('dropzone');['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
 $('clear').onclick=()=>{file=null;rows=[];$('videoFile').value='';$('preview').removeAttribute('src');$('preview').load();$('preview').style.display='none';$('fileline').classList.add('hidden');$('generate').disabled=true;$('clear').disabled=true;$('empty').style.display='grid';$('toolbar').style.display='none';$('segments').innerHTML='';clearStatus()};
 function wavBlob(buffer){const channels=1,rate=16000,source=buffer.getChannelData(0),ratio=buffer.sampleRate/rate,length=Math.floor(source.length/ratio),data=new Float32Array(length);for(let i=0;i<length;i++){const pos=i*ratio,left=Math.floor(pos),frac=pos-left;data[i]=source[left]*(1-frac)+(source[Math.min(left+1,source.length-1)]||0)*frac}const bytes=new ArrayBuffer(44+data.length*2),v=new DataView(bytes);const str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+data.length*2,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,channels,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,data.length*2,true);for(let i=0;i<data.length;i++){const s=Math.max(-1,Math.min(1,data[i]));v.setInt16(44+i*2,s<0?s*32768:s*32767,true)}return new Blob([bytes],{type:'audio/wav'})}
-async function extractAudio(f){const ctx=new (window.AudioContext||window.webkitAudioContext)();try{const raw=await f.arrayBuffer();const decoded=await ctx.decodeAudioData(raw.slice(0));return wavBlob(decoded)}finally{await ctx.close()}}
+async function extractAudio(f){
+ const AudioCtx=window.AudioContext||window.webkitAudioContext;
+ const ctx=new AudioCtx();
+ try{
+  const raw=await f.arrayBuffer();
+  try{return wavBlob(await ctx.decodeAudioData(raw.slice(0)))}catch(decodeError){
+   const video=$('preview');
+   const capture=video.captureStream||video.mozCaptureStream;
+   if(!capture||!window.MediaRecorder)throw decodeError;
+   video.pause();video.currentTime=0;
+   await new Promise((resolve,reject)=>{if(video.readyState>=1)return resolve();video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error('Video could not be opened.'))});
+   const sourceStream=capture.call(video);
+   const audioTracks=sourceStream.getAudioTracks();
+   if(!audioTracks.length)throw new Error('No audio track was found in this video.');
+   const audioStream=new MediaStream(audioTracks);
+   const mime=['audio/webm;codecs=opus','audio/mp4'].find(t=>MediaRecorder.isTypeSupported(t));
+   const recorder=new MediaRecorder(audioStream,mime?{mimeType:mime}:undefined);
+   const chunks=[];
+   const recorded=new Promise((resolve,reject)=>{recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};recorder.onerror=()=>reject(new Error('Could not capture the video audio.'));recorder.onstop=()=>resolve(new Blob(chunks,{type:recorder.mimeType||'audio/webm'}))});
+   recorder.start(1000);
+   try{await video.play();await new Promise((resolve,reject)=>{video.onended=resolve;video.onerror=()=>reject(new Error('Video playback failed while extracting audio.'))})}finally{if(recorder.state!=='inactive')recorder.stop();video.pause();video.currentTime=0}
+   const audioBlob=await recorded;
+   if(!audioBlob.size)throw new Error('No audio could be extracted. Try an MP4 with AAC audio.');
+   const decoded=await ctx.decodeAudioData(await audioBlob.arrayBuffer());
+   return wavBlob(decoded);
+  }
+ }finally{await ctx.close()}
+}
 function secTime(n){n=Math.max(0,Number(n)||0);const m=Math.floor(n/60),s=n-m*60;return String(m).padStart(2,'0')+':'+s.toFixed(3).padStart(6,'0')}
 function parseTime(s){const p=String(s).trim().split(':');if(p.length===2)return Number(p[0])*60+Number(p[1]);return Number(s)||0}
 function stamp(s,comma){const n=Math.max(0,Number(s)||0),h=Math.floor(n/3600),m=Math.floor(n%3600/60),sec=Math.floor(n%60),ms=Math.round((n-Math.floor(n))*1000);return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')+(comma?',':'.')+String(ms).padStart(3,'0')}
