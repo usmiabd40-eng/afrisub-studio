@@ -6,8 +6,8 @@ A mobile-friendly browser workspace to transcribe Amharic speech, edit timed cap
 
 - MP4/MOV upload (250 MB browser UI limit).
 - Audio extraction in the browser; the original video is not uploaded to the transcription API.
-- Hohe ASR (Amharic-specialist) as the primary engine, with timestamped chunk output.
-- Google Cloud Speech-to-Text and Cloudflare Workers AI Whisper as selectable alternatives.
+- Cloudflare Workers AI Whisper large-v3-turbo for Amharic transcription, with word timestamps grouped into subtitle lines.
+- Hohe ASR is not active until a separate model server is deployed. Google Speech is disabled in the app.
 - Editable Amharic captions and start/end times.
 - Live subtitle preview with text size, color and background controls.
 - Export SRT and WebVTT files.
@@ -47,8 +47,8 @@ The Pages Function proxies transcription server-to-server; the secret is not exp
 
 ## Other transcription engines
 
-- Google: set `GOOGLE_SPEECH_API_KEY` as a Pages secret.
-- Whisper: requires the Pages AI binding named `AI`.
+- Whisper: requires the Pages AI binding named `AI`; this project has that binding configured.
+- Workers AI includes a free allocation of 10,000 Neurons per day. On the Workers Free plan, requests stop when the daily allocation is exhausted. On a Paid plan, usage above the free allocation may be billed. Check your Cloudflare plan and usage before transcribing. Google Speech is disabled in the app to avoid paid API calls.
 
 ## API
 
@@ -67,7 +67,7 @@ Use Wrangler Pages local development with an `AI` binding and required secrets i
 - Speech recognition is not word-perfect. The model is Amharic-only, does not add punctuation, and performs worse with overlapping speakers. Review the transcript before publishing.
 - Browser audio decoding depends on the video's audio codec. MP4 with AAC audio is a good compatibility choice.
 - Video export records the video and subtitle overlay in real time to WebM using the browser MediaRecorder API. Keep the tab open until export completes.
-- Google and Whisper remain available as alternatives if configured.
+- The browser transcription workflow currently supports Amharic only. Afaan Oromoo is not implemented yet.
 
 ## Model attribution
 
