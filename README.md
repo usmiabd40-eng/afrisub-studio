@@ -1,38 +1,46 @@
 # AfriSub Studio — Amharic Edition
 
-A focused browser app for generating editable Amharic subtitles from MP4/MOV videos.
+A mobile-friendly browser workspace to transcribe Amharic speech, edit timed captions, preview them over a video, and export a captioned WebM for YouTube.
 
 ## Features
 
-- Upload an MP4 or MOV video (up to 250 MB in the browser UI).
-- Extract the audio in the browser. The original video is not uploaded.
-- Transcribe Amharic speech with Cloudflare Workers AI Whisper Large v3 Turbo.
-- Review and edit Amharic text and subtitle timings.
-- Export subtitles as SRT or WebVTT.
+- MP4/MOV upload (250 MB browser UI limit).
+- Audio extraction in the browser; the original video is not uploaded to the transcription API.
+- Google Cloud Speech-to-Text (am-ET) as the recommended Amharic engine, using automatic punctuation and word timestamps.
+- Cloudflare Workers AI Whisper as a selectable fallback.
+- Editable Amharic captions and start/end times.
+- Live subtitle preview with text size, color and background controls.
+- Export SRT and WebVTT files.
+- Record a subtitled WebM in the browser; YouTube accepts WebM uploads.
 
-## Cloudflare setup
+## Cloudflare Pages setup
 
-This project uses Cloudflare Pages Functions and a Workers AI binding.
+The repository is connected to Cloudflare Pages and deploys from main. The Pages project uses an AI binding named AI for the Whisper fallback.
 
-1. Connect this GitHub repository to a Cloudflare Pages project.
-2. Set the production branch to `main`; leave the build command empty and the output directory as `/`.
-3. In the Pages project settings, add a Workers AI binding named `AI` for both Production and Preview environments.
-4. Deploy the project.
+### Enable Google Chirp (recommended)
 
-The API route is `POST /api/transcribe` and expects multipart form data with a WAV file field named `audio`.
+1. In Google Cloud Console, select or create a project and enable the Cloud Speech-to-Text API.
+2. Create an API key. Restrict it to the Cloud Speech-to-Text API and appropriate usage limits.
+3. In Cloudflare Dashboard, open Workers & Pages → afrisub-studio → Settings → Variables and Secrets.
+4. Add a production secret named GOOGLE_SPEECH_API_KEY with the API key value. Add it to Preview too if you want preview deployments to use Google.
+5. Redeploy the latest commit.
+
+The key is read only by the server-side Pages Function; it is never sent to the browser. Google lists Amharic (Ethiopia), locale am-ET, for Chirp and Chirp 2. Recognition quality still depends on the audio and must be reviewed.
+
+### API
+
+POST /api/transcribe accepts multipart form data: audio (mono 16 kHz PCM WAV) and provider (google or whisper).
+
+The Google provider sends 50-second audio chunks to Google Cloud Speech-to-Text and offsets returned word timestamps to the original video timeline. The Whisper provider calls the Cloudflare Workers AI Whisper Large v3 Turbo model.
 
 ## Local development
 
-Use the Cloudflare Pages local development tooling (for example, `wrangler pages dev`) with an AI binding configured in your local Wrangler configuration. Do not commit API tokens or secrets.
+Use Wrangler Pages local development with an AI binding and a local GOOGLE_SPEECH_API_KEY secret in .dev.vars. Never commit .dev.vars, API keys, or other secrets.
 
-## Important notes
+## Notes and limitations
 
-- Transcription quality varies with recording quality, accent, background noise, and the model's Amharic performance. Review spelling, names, punctuation, and timings before publishing.
-- The browser must be able to decode the video's audio track. MP4 with AAC audio is the most broadly compatible starting point.
-- The first release exports SRT and VTT. Burned-in MP4 export is not included yet.
-- The transcription endpoint has a 24 MB extracted-audio limit.
-
-
-## Deployment
-
-Production hosting target: Cloudflare Pages (`afrisub-studio.pages.dev`).
+- Speech recognition is not guaranteed to be word-perfect. Always play the video and correct the transcript before publishing.
+- Browser audio decoding depends on the video audio codec. MP4 with AAC audio is a good compatibility choice.
+- Video export records the video and subtitle overlay in real time to WebM using the browser MediaRecorder API. Keep the tab open until export completes; long videos take as long as their playback duration.
+- Video export depends on browser support for canvas capture and MediaRecorder. SRT/VTT exports remain available if a browser cannot record video.
+- Google Chirp requires a Google Cloud API key and may incur Google Cloud charges. Whisper remains available as a fallback.
