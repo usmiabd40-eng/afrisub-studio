@@ -88,12 +88,44 @@ async function googleTranscribe(bytes, env) {
   }
   return chunks;
 }
+function groupWhisperWords(words) {
+  const out = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const first = group[0], last = group[group.length - 1];
+    out.push({
+      start: Number(first.start) || 0,
+      end: Number(last.end) || Number(first.start) || 0,
+      text: group.map(w => String(w.word || "")).join("").trim()
+    });
+    group = [];
+  };
+  for (const word of words || []) {
+    if (!word || !String(word.word || "").trim()) continue;
+    group.push(word);
+    const value = String(word.word || "");
+    if (group.length >= 7 || /[።፧!?.,፤፥]$/.test(value.trim())) flush();
+  }
+  flush();
+  return out.filter(x => x.text && x.end > x.start);
+}
 async function whisperTranscribe(bytes, env) {
   if (!env.AI) throw new Error("Whisper is not configured on this project.");
   const audio = b64(bytes);
-  const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "am", vad_filter: true, condition_on_previous_text: true });
-  const segments = (result?.segments || []).map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || "").trim() })).filter(s => s.text);
-  if (!segments.length && result?.text) segments.push({ start: 0, end: Number(result?.transcription_info?.duration) || 1, text: result.text.trim() });
+  const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
+    audio, task: "transcribe", language: "am", vad_filter: true,
+    condition_on_previous_text: true
+  });
+  let segments = Array.isArray(result?.segments)
+    ? result.segments.map(s => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || "").trim() })).filter(s => s.text && s.end > s.start)
+    : [];
+  if (!segments.length && Array.isArray(result?.words)) segments = groupWhisperWords(result.words);
+  if (!segments.length && result?.text) {
+    const words = Array.isArray(result?.words) ? result.words : [];
+    const duration = words.length ? Number(words[words.length - 1].end) || 1 : Number(result?.transcription_info?.duration) || 1;
+    segments.push({ start: 0, end: duration, text: String(result.text).trim() });
+  }
   return segments;
 }
 export async function onRequestPost({ request, env }) {
@@ -101,7 +133,7 @@ export async function onRequestPost({ request, env }) {
   const origin = request.headers.get("Origin");
   if (origin && origin !== new URL(request.url).origin) return json({ error: "Cross-origin requests are not allowed." }, 403);
   let form; try { form = await request.formData(); } catch { return json({ error: "Please upload an audio track." }, 400); }
-  const audio = form.get("audio"), provider = ["hohe", "whisper"].includes(form.get("provider")) ? form.get("provider") : "google";
+  const audio = form.get("audio"), requestedProvider = String(form.get("provider") || "whisper"), provider = ["hohe", "whisper", "google"].includes(requestedProvider) ? requestedProvider : "whisper";
   if (!(audio instanceof File)) return json({ error: "No audio file was received." }, 400);
   if (!["audio/wav", "audio/x-wav"].includes(audio.type)) return json({ error: "Audio must be WAV format." }, 415);
   if (audio.size < 44 || audio.size > MAX_AUDIO_BYTES) return json({ error: "Audio must be between 44 bytes and 24 MB." }, 413);
